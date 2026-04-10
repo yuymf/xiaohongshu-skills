@@ -136,18 +136,33 @@ def _resolve_account(args: argparse.Namespace) -> str | None:
     return account_manager.get_profile_dir(name)
 
 
+def _should_use_headless() -> bool:
+    """检测是否应使用 headless 模式。
+
+    优先使用环境变量强制设置，其次基于 has_display() 自动判断。
+    在 CI 或 E2E_MOCK_XHS 测试环境下强制使用 headless。
+    """
+    import os
+
+    if os.getenv("CI") or os.getenv("E2E_MOCK_XHS"):
+        return True
+    from chrome_launcher import has_display
+
+    return not has_display()
+
+
 def _connect(args: argparse.Namespace):
     """连接到 Chrome 并返回 (browser, page)。
 
     优先复用上次命令留下的 tab（通过端口隔离的 session tab 文件记录），
     避免每次命令都新建 tab 导致 Chrome 中 tab 堆积。
     """
-    from chrome_launcher import ensure_chrome, has_display
+    from chrome_launcher import ensure_chrome
     from xhs.cdp import Browser
 
     user_data_dir = _resolve_account(args)
 
-    if not ensure_chrome(port=args.port, headless=not has_display(), user_data_dir=user_data_dir):
+    if not ensure_chrome(port=args.port, headless=_should_use_headless(), user_data_dir=user_data_dir):
         _output(
             {"success": False, "error": "无法启动 Chrome，请检查 Chrome 是否已安装"},
             exit_code=2,
@@ -173,12 +188,12 @@ def _connect(args: argparse.Namespace):
 
 def _connect_saved_tab(args: argparse.Namespace):
     """连接到登录流程中记录的精确 tab，回退到第一个非空白 tab。"""
-    from chrome_launcher import ensure_chrome, has_display
+    from chrome_launcher import ensure_chrome
     from xhs.cdp import Browser
 
     user_data_dir = _resolve_account(args)
 
-    if not ensure_chrome(port=args.port, headless=not has_display(), user_data_dir=user_data_dir):
+    if not ensure_chrome(port=args.port, headless=_should_use_headless(), user_data_dir=user_data_dir):
         _output({"success": False, "error": "无法连接到 Chrome"}, exit_code=2)
 
     browser = Browser(host=args.host, port=args.port)
@@ -202,12 +217,12 @@ def _connect_saved_tab(args: argparse.Namespace):
 
 def _connect_existing(args: argparse.Namespace):
     """连接到 Chrome 并复用已有页面（用于分步发布的后续步骤）。"""
-    from chrome_launcher import ensure_chrome, has_display
+    from chrome_launcher import ensure_chrome
     from xhs.cdp import Browser
 
     user_data_dir = _resolve_account(args)
 
-    if not ensure_chrome(port=args.port, headless=not has_display(), user_data_dir=user_data_dir):
+    if not ensure_chrome(port=args.port, headless=_should_use_headless(), user_data_dir=user_data_dir):
         _output(
             {"success": False, "error": "无法连接到 Chrome"},
             exit_code=2,
@@ -225,8 +240,25 @@ def _connect_existing(args: argparse.Namespace):
 
 
 def _headless_fallback(port: int) -> None:
-    """Headless 模式未登录时的处理：有桌面降级到有窗口模式，无桌面直接报错提示。"""
-    from chrome_launcher import has_display, restart_chrome
+    """Headless 模式未登录时的处理：测试环境直接报错，有桌面环境降级到有窗口模式。"""
+    from chrome_launcher import restart_chrome
+
+    # 测试环境下不允许切换到有窗口模式
+    import os
+
+    if os.getenv("CI") or os.getenv("E2E_MOCK_XHS"):
+        _output(
+            {
+                "success": False,
+                "error": "未登录",
+                "action": "headless_required",
+                "message": "测试环境需要先完成登录，请设置 E2E_MOCK_XHS=1 使用 mock",
+            },
+            exit_code=1,
+        )
+        return
+
+    from chrome_launcher import has_display
 
     if has_display():
         logger.info("Headless 模式未登录，切换到有窗口模式...")
