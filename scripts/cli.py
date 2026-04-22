@@ -644,7 +644,7 @@ def cmd_list_feeds(args: argparse.Namespace) -> None:
 
 def cmd_search_feeds(args: argparse.Namespace) -> None:
     """搜索 Feeds。"""
-    from xhs.search import search_feeds
+    from xhs.search import search_feeds, get_cached_feeds
     from xhs.types import FilterOption
 
     filter_opt = FilterOption(
@@ -658,7 +658,15 @@ def cmd_search_feeds(args: argparse.Namespace) -> None:
     browser, page = _connect(args)
     try:
         feeds = search_feeds(page, args.keyword, filter_opt)
-        _output({"feeds": [f.to_dict() for f in feeds], "count": len(feeds)})
+        result: dict = {
+            "feeds": [f.to_dict() for f in feeds],
+            "count": len(feeds),
+        }
+        # ★ 附带缓存的首页 feeds，供 TS 端缓存复用
+        cached = get_cached_feeds()
+        if cached:
+            result["cached_home_feeds"] = cached
+        _output(result)
     finally:
         browser.close_page(page)
         browser.close()

@@ -107,6 +107,7 @@ class NoteCard:
     interact_info: InteractInfo = field(default_factory=InteractInfo)
     cover: Cover = field(default_factory=Cover)
     video: Video | None = None
+    time: int = 0  # 发布时间戳（秒），XHS noteCard.time
 
     @classmethod
     def from_dict(cls, d: dict) -> NoteCard:
@@ -118,6 +119,7 @@ class NoteCard:
             interact_info=InteractInfo.from_dict(d.get("interactInfo", {})),
             cover=Cover.from_dict(d.get("cover", {})),
             video=Video.from_dict(video_data) if video_data else None,
+            time=d.get("time", 0),
         )
 
 
@@ -159,6 +161,12 @@ class Feed:
                 "sharedCount": self.note_card.interact_info.shared_count,
             },
         }
+        # 发布时间：noteCard.time 是 Unix 秒级时间戳
+        if self.note_card.time:
+            from datetime import datetime, timezone
+            result["createdAt"] = datetime.fromtimestamp(
+                self.note_card.time, tz=timezone.utc
+            ).isoformat()
         cover = self.note_card.cover
         if cover.url or cover.url_default:
             result["cover"] = cover.url or cover.url_default
