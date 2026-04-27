@@ -2,7 +2,51 @@
 
 小红书自动化 Skills，基于 Python CDP 浏览器自动化引擎。
 
+> **Fork 声明**：本项目 fork 自 `/https://github.com/autoclaw-cc/xiaohongshu-skills`，在原有基础上进行了深度增强，重点强化了**防风控能力与工程稳定性**。
+
 支持 [OpenClaw](https://github.com/anthropics/openclaw) 及所有兼容 `SKILL.md` 格式的 AI Agent 平台（如 Claude Code）。
+
+## 新增功能
+
+相较于原项目，本 fork 主要新增/强化了以下能力：
+
+### 1. 多账号隔离管理
+- 支持配置多个小红书账号，每个账号拥有**独立的 Chrome Profile 与调试端口**
+- 通过 `account_manager.py` 统一管理，避免 Cookie/登录态互相污染
+- CLI 全局支持 `--account NAME` 切换账号
+
+### 2. 单实例锁机制
+- `run_lock.py` 文件锁确保同一时刻只有一个进程操作浏览器
+- 内置**死锁检测与自动释放**（检测持有进程是否存活，自动清理过时锁文件）
+
+### 3. Chrome 进程管理增强
+- 跨平台自动查找 Chrome 可执行文件（支持 macOS / Linux / Windows）
+- TCP 级端口检测，精准判断 Chrome 是否已就绪
+- 三层关闭策略：`Browser.close` → `terminate` → 按端口查杀进程
+- 支持 `XHS_PROXY` 环境变量一键配置代理
+
+### 4. 防风控体系（核心增强）
+本项目对反检测能力进行了系统性重构，从**浏览器指纹、行为模拟、交互真实性**三个维度构建防风控屏障：
+
+| 维度 | 措施 | 实现文件 |
+|------|------|----------|
+| **指纹伪装** | `navigator.webdriver` 原生 getter 代理（`toString` 仍返回 `[native code]`） | `stealth.py` |
+| | 补齐 `chrome.runtime`、`chrome.app` 等 headless 缺失对象 | `stealth.py` |
+| | `navigator.vendor`、`navigator.languages`、`permissions.query` 伪装 | `stealth.py` |
+| | WebGL `vendor` / `renderer` 与操作系统平台严格一致（覆盖 WebGL1 & WebGL2） | `stealth.py` |
+| | `hardwareConcurrency`、`deviceMemory`、`navigator.connection` 动态随机/伪造 | `stealth.py` |
+| | UA、Client Hints、platform、architecture 全链路信号一致性 | `stealth.py` |
+| | Chrome 启动参数：`--disable-blink-features=AutomationControlled` 等 | `stealth.py` |
+| **行为模拟** | 页面导航后随机阅读等待（1–2.5 s） | `human.py` |
+| | 滚动速度/距离随机化（慢/正常/快三档 + 随机扰动） | `human.py` |
+| | 操作间随机延迟（300–1200 ms 分级策略） | `human.py` |
+| **交互真实** | CDP `Input.dispatchMouseEvent` 真实鼠标事件（`isTrusted=true`） | `cdp.py` |
+| | 点击坐标随机偏移（±3 px 高斯扰动） | `cdp.py` |
+| | 文本输入逐字键入（30–80 ms 随机间隔，换行符转真实 Enter 键） | `cdp.py` |
+| | 每次新建页面随机生成 viewport 尺寸（1366–1920 × 768–1080） | `cdp.py` |
+| | `Page.addScriptToEvaluateOnNewDocument` 提前注入反检测脚本 | `cdp.py` |
+
+> 总结：通过 **JS 运行时环境伪装 + 人类行为节奏模拟 + CDP 原生输入事件** 的组合，最大程度降低被平台识别为自动化脚本的风险。
 
 ## 功能概览
 
